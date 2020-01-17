@@ -1,4 +1,6 @@
 import { Registry } from 'vscode-textmate'
+import { JSDOM } from 'jsdom'
+import * as d2i from 'dom-to-image'
 
 import {
   TLang,
@@ -11,7 +13,7 @@ import {
 import { Resolver } from './resolver'
 import { getOnigasm } from './onigLibs'
 import { tokenizeWithTheme, IThemedToken } from './themedTokenizer'
-import { renderToHtml } from './renderer'
+import { renderToSVG, renderToHtml } from './renderer'
 
 import { getTheme, TTheme, IShikiTheme } from 'shiki-themes'
 
@@ -62,6 +64,46 @@ class Shiki {
     this._langs = langs
   }
 
+  codeToThemedTokens(code, lang, ltog) {
+    if (isPlaintext(lang)) {
+      throw Error('Cannot tokenize plaintext')
+    }
+    if (!ltog[lang]) {
+      throw Error(`No language registration for ${lang}`)
+    }
+    return tokenizeWithTheme(this._theme, this._colorMap, code, ltog[lang])
+  }
+
+  codeToHtml(code, lang, ltog) {
+    if (isPlaintext(lang)) {
+      return renderToHtml([[{ content: code }]], {
+        bg: this._theme.bg,
+        colorMap: this._colorMap
+      })
+    }
+
+    const tokens = this.codeToThemedTokens(code, lang, ltog)
+    return renderToHtml(tokens, {
+      bg: this._theme.bg,
+      colorMap: this._colorMap
+    })
+  }
+
+  codeToSvg(code, lang, ltog) {
+    if (isPlaintext(lang)) {
+      return renderToSVG([[{ content: code }]], {
+        bg: this._theme.bg,
+        colorMap: this._colorMap
+      })
+    }
+
+    const tokens = this.codeToThemedTokens(code, lang, ltog)
+    return renderToSVG(tokens, {
+      bg: this._theme.bg,
+      colorMap: this._colorMap
+    })
+  }
+
   async getHighlighter(): Promise<Highlighter> {
     const ltog = {}
 
@@ -76,29 +118,9 @@ class Shiki {
     )
 
     return {
-      codeToThemedTokens: (code, lang) => {
-        if (isPlaintext(lang)) {
-          throw Error('Cannot tokenize plaintext')
-        }
-        if (!ltog[lang]) {
-          throw Error(`No language registration for ${lang}`)
-        }
-        return tokenizeWithTheme(this._theme, this._colorMap, code, ltog[lang])
-      },
-      codeToHtml: (code, lang) => {
-        if (isPlaintext(lang)) {
-          return renderToHtml([[{ content: code }]], {
-            bg: this._theme.bg
-          })
-        }
-        if (!ltog[lang]) {
-          throw Error(`No language registration for ${lang}`)
-        }
-        const tokens = tokenizeWithTheme(this._theme, this._colorMap, code, ltog[lang])
-        return renderToHtml(tokens, {
-          bg: this._theme.bg
-        })
-      }
+      codeToThemedTokens: (code, lang) => this.codeToThemedTokens(code, lang, ltog),
+      codeToSVG: (code, lang) => this.codeToSvg(code, lang, ltog),
+      codeToHtml: (code, lang) => this.codeToHtml(code, lang, ltog)
     }
   }
 }
@@ -114,6 +136,6 @@ export interface Highlighter {
   // codeToRawHtml?(code: string): string
   // getRawCSS?(): string
 
-  // codeToSVG?(): string
+  codeToSVG?(code: string, lang: TLang): string
   // codeToImage?(): string
 }
